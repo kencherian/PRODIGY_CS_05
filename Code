@@ -1,0 +1,77 @@
+import tkinter as tk
+from tkinter import scrolledtext, filedialog
+from scapy.all import sniff, IP, TCP, UDP, Raw, wrpcap
+import threading
+
+# Globals
+captured_packets = []
+sniffing = False
+
+# Callback function to handle each packet
+def packet_callback(packet):
+    captured_packets.append(packet)
+
+    log = ""
+    if IP in packet:
+        log += f"{packet[IP].src} → {packet[IP].dst} | "
+    if TCP in packet:
+        log += "TCP"
+    elif UDP in packet:
+        log += "UDP"
+    else:
+        log += "Other"
+
+    if Raw in packet:
+        try:
+            payload = packet[Raw].load.decode(errors='ignore')
+            log += f"\nPayload: {payload}"
+        except:
+            pass
+
+    log += "\n" + "-"*60 + "\n"
+    output_box.insert(tk.END, log)
+    output_box.yview(tk.END)
+
+# Start sniffing in a separate thread
+def start_sniffing():
+    global sniffing
+    sniffing = True
+    sniff_thread = threading.Thread(target=lambda: sniff(prn=packet_callback, store=0, stop_filter=lambda x: not sniffing))
+    sniff_thread.start()
+
+# Stop sniffing
+def stop_sniffing():
+    global sniffing
+    sniffing = False
+
+# Save logs to file
+def save_logs():
+    file_txt = filedialog.asksaveasfilename(defaultextension=".txt", filetypes=[("Text files", "*.txt")])
+    file_pcap = filedialog.asksaveasfilename(defaultextension=".pcap", filetypes=[("PCAP files", "*.pcap")])
+    if file_txt:
+        with open(file_txt, "w") as f:
+            f.write(output_box.get("1.0", tk.END))
+    if file_pcap:
+        wrpcap(file_pcap, captured_packets)
+
+# GUI Setup
+root = tk.Tk()
+root.title("Network Packet Analyzer")
+root.geometry("700x500")
+
+frame = tk.Frame(root)
+frame.pack(pady=10)
+
+start_btn = tk.Button(frame, text="Start Capture", command=start_sniffing, bg="green", fg="white")
+start_btn.pack(side=tk.LEFT, padx=10)
+
+stop_btn = tk.Button(frame, text="Stop Capture", command=stop_sniffing, bg="red", fg="white")
+stop_btn.pack(side=tk.LEFT, padx=10)
+
+save_btn = tk.Button(frame, text="Save Logs", command=save_logs, bg="blue", fg="white")
+save_btn.pack(side=tk.LEFT, padx=10)
+
+output_box = scrolledtext.ScrolledText(root, wrap=tk.WORD, width=80, height=25)
+output_box.pack(padx=10, pady=10)
+
+root.mainloop()
